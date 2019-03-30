@@ -1,0 +1,45 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Test S3'
+
+Parameters: 
+  DataBucketName:
+    Type: String
+    Default: werberm-s3-tests-replication-bucket
+
+Resources:
+  
+  DataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref DataBucketName
+      AccessControl: BucketOwnerFullControl
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: 
+              #KMSMasterKeyID: "aws/s3"
+              SSEAlgorithm: "aws:kms"
+      LifecycleConfiguration:
+        Rules:
+          - Id: "DeleteIncompleteMultipartUploads"
+            Status: "Enabled"
+            AbortIncompleteMultipartUpload: 
+              DaysAfterInitiation: 5
+
+          - Id: "DeleteOldObjectsAfterAYear"
+            Status: Enabled
+            ExpirationInDays: 365
+
+          - Id: "DeleteNonCurrentVersionsAfter6Months"
+            Status: Enabled
+            NoncurrentVersionExpirationInDays: 180
+
+          - Id: "MoveToInfrequentAccessAfter30Days"
+            Status: Enabled
+            NoncurrentVersionTransitions:
+              - StorageClass: STANDARD_IA
+                TransitionInDays: 30
+            Transitions:
+              - StorageClass: STANDARD_IA
+                TransitionInDays: 30

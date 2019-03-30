@@ -1,0 +1,171 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Test S3'
+
+Parameters: 
+  DataBucketName:
+    Type: String
+    Default: werberm-s3-tests-data
+
+  LogBucketName:
+    Type: String
+    Default: werberm-s3-tests-logs
+
+  ReplicationBucket:
+    Type: String
+    Default: werberm-s3-tests-replication-bucket
+
+Resources:
+  
+  # Log bucket will contain various logs / reports from the data bucket. 
+  # - Inventory reports
+  # - Analytics reports
+  LogBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref LogBucketName
+      AccessControl: LogDeliveryWrite
+ 
+
+  DataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref DataBucketName
+      AccessControl: BucketOwnerFullControl
+      AccelerateConfiguration: 
+        AccelerationStatus: Enabled
+      AnalyticsConfigurations:
+        - Id: AllItemsFilter
+          StorageClassAnalysis:
+            DataExport:
+              OutputSchemaVersion: V_1
+              Destination:
+                BucketAccountId: !Ref "AWS::AccountId"
+                Format: CSV
+                BucketArn: !Sub "arn:aws:s3:::${AWS::AccountId}-${LogBucketName}"
+                Prefix: !Sub "s3-storage-class-analysis/${DataBucketName}/"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: 
+              #KMSMasterKeyID: "aws/s3"
+              SSEAlgorithm: "aws:kms"
+      InventoryConfigurations:
+      - Enabled: True
+        Id: MyInventoryReport
+        ScheduleFrequency: "Daily"
+        Destination:
+          BucketAccountId: !Ref "AWS::AccountId"
+          Format: CSV
+          BucketArn: !Sub "arn:aws:s3:::${AWS::AccountId}-${LogBucketName}"
+          Prefix: !Sub "s3-inventory/${DataBucketName}/"
+        IncludedObjectVersions: All
+        OptionalFields: 
+          - Size
+          - LastModifiedDate
+          - StorageClass
+          - ETag
+          - IsMultipartUploaded
+          - ReplicationStatus
+          - EncryptionStatus
+          - ObjectLockRetainUntilDate
+          - ObjectLockMode
+          - ObjectLockLegalHoldStatus
+      LifecycleConfiguration:
+        Rules:
+          - Id: "DeleteIncompleteMultipartUploads"
+            Status: "Enabled"
+            AbortIncompleteMultipartUpload: 
+              DaysAfterInitiation: 5
+
+          - Id: "DeleteOldObjectsAfterAYear"
+            Status: Enabled
+            ExpirationInDays: 365
+
+          - Id: "DeleteNonCurrentVersionsAfter6Months"
+            Status: Enabled
+            NoncurrentVersionExpirationInDays: 180
+
+          - Id: "MoveToInfrequentAccessAfter30Days"
+            Status: Enabled
+            NoncurrentVersionTransitions:
+              - StorageClass: STANDARD_IA
+                TransitionInDays: 30
+            Transitions:
+              - StorageClass: STANDARD_IA
+                TransitionInDays: 30
+      LoggingConfiguration:
+        DestinationBucketName: !Sub "${LogBucketName}"
+        LogFilePrefix: !Sub "s3-logs/${DataBucketName}/"
+      MetricsConfigurations:
+        - Id: LogAllMetrics
+      #NotificationConfiguration:
+      #  LambdaConfigurations:
+      #    - Lambda Configuration
+      #  QueueConfigurations:
+      #    - Queue Configuration
+      #  TopicConfigurations:
+      #    - Topic Configuration 
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: True
+        BlockPublicPolicy: True
+        IgnorePublicAcls: True
+        RestrictPublicBuckets: True
+      VersioningConfiguration:
+        Status: Enabled
+      ReplicationConfiguration:
+        Role: !GetAtt S3ReplicationRole.Arn
+        Rules:
+          -
+            Id: "MyReplicationId"
+            Status: Enabled
+            Prefix: ""
+            Destination:
+              #AccessControlTranslation: AccessControlTranslation
+              #Account: String
+              Bucket: !Sub "arn:aws:s3:::${ReplicationBucket}"
+              EncryptionConfiguration:
+                ReplicaKmsKeyID: !Sub "arn:aws:kms:us-west-1:${AWS::AccountId}:alias/aws/s3"
+              StorageClass: STANDARD_IA
+            SourceSelectionCriteria:
+              SseKmsEncryptedObjects: 
+                Status: Disabled
+
+  S3ReplicationRole: 
+    Type: "AWS::IAM::Role"
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Principal: 
+              Service: 
+                - "s3.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      Path: "/"
+      Policies: 
+        - 
+          PolicyName: "s3ReplicationRole"
+          PolicyDocument: 
+            Version: "2012-10-17"
+            Statement: 
+              - 
+                Effect: "Allow"
+                Action: 
+                  - "s3:GetReplicationConfiguration"
+                  - "s3:ListBucket"
+                Resource: !Sub "arn:aws:s3:::${DataBucketName}"
+              -
+                Effect: "Allow"
+                Action:
+                  - "s3:GetObjectVersion"
+                  - "s3:GetObjectVersionAcl"
+                  - "s3:GetObjectVersionTagging"
+                Resource: !Sub "arn:aws:s3:::${DataBucketName}/*"
+              -
+                Effect: "Allow"
+                Action:
+                  - "s3:ReplicateObject"
+                  - "s3:ReplicateDelete"
+                  - "s3:ReplicateTags"
+                Resource: !Sub "arn:aws:s3:::${ReplicationBucket}/*"
