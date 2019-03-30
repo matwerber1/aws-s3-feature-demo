@@ -94,7 +94,7 @@ Resources:
                 TransitionInDays: 30
       LoggingConfiguration:
         DestinationBucketName: !Sub "${LogBucketName}"
-        LogFilePrefix: !Sub "s3-logs/${DataBucketName}/"
+        LogFilePrefix: !Sub "s3-server-access-logs/${DataBucketName}/"
       MetricsConfigurations:
         - Id: LogAllMetrics
       #NotificationConfiguration:
@@ -169,3 +169,52 @@ Resources:
                   - "s3:ReplicateDelete"
                   - "s3:ReplicateTags"
                 Resource: !Sub "arn:aws:s3:::${ReplicationBucket}/*"
+
+  LogBucketPolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket: !Ref LogBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Sid: AWSCloudTrailAclCheck
+          Effect: Allow
+          Principal:
+            Service: 'cloudtrail.amazonaws.com'
+          Action: 's3:GetBucketAcl'
+          Resource: !Sub 'arn:aws:s3:::${LogBucket}'
+        - Sid: AWSCloudTrailWrite
+          Effect: Allow
+          Principal:
+            Service: 'cloudtrail.amazonaws.com'
+          Action: 's3:PutObject'
+          Resource: !Sub 'arn:aws:s3:::${LogBucket}/cloudtrail/AWSLogs/${AWS::AccountId}/*'
+          Condition:
+            StringEquals:
+              's3:x-amz-acl': 'bucket-owner-full-control'
+
+  DataBucketCloudTrailLog:
+    Type: AWS::CloudTrail::Trail
+    DependsOn:
+    - LogBucketPolicy
+    Properties:
+      #CloudWatchLogsLogGroupArn: String
+      #CloudWatchLogsRoleArn: String
+      EnableLogFileValidation: true
+      EventSelectors:
+        - DataResources: 
+          - Type: "AWS::S3::Object"
+            Values: 
+              - !Sub "arn:aws:s3:::${DataBucketName}/*"
+          IncludeManagementEvents: false
+          ReadWriteType: All
+      IncludeGlobalServiceEvents: false
+      IsLogging: true
+      IsMultiRegionTrail: false
+      #KMSKeyId: String
+      S3BucketName: !Ref "LogBucketName"
+      S3KeyPrefix: "cloudtrail"
+      #SnsTopicName: String
+      #Tags:
+      #  - Resource Tag
+      TrailName: "werberm-s3-tests-data"
