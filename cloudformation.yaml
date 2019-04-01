@@ -24,12 +24,27 @@ Resources:
     Properties:
       BucketName: !Ref LogBucketName
       AccessControl: LogDeliveryWrite
- 
+      Tags:
+        - 
+          Key: CostDepartment
+          Value: Engineering
+        - 
+          Key: CostProject
+          Value: "S3 Demo"
+      MetricsConfigurations:
+        - Id: EntireBucket
 
   DataBucket:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Ref DataBucketName
+      Tags:
+        - 
+          Key: CostDepartment
+          Value: Engineering
+        - 
+          Key: CostProject
+          Value: "S3 Demo"
       AccessControl: BucketOwnerFullControl
       AccelerateConfiguration: 
         AccelerationStatus: Enabled
@@ -41,8 +56,8 @@ Resources:
               Destination:
                 BucketAccountId: !Ref "AWS::AccountId"
                 Format: CSV
-                BucketArn: !Sub "arn:aws:s3:::${AWS::AccountId}-${LogBucketName}"
-                Prefix: !Sub "s3-storage-class-analysis/${DataBucketName}/"
+                BucketArn: !Sub "arn:aws:s3:::${LogBucketName}"
+                Prefix: !Sub "s3-storage-class-analysis/${DataBucketName}"
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault: 
@@ -55,8 +70,8 @@ Resources:
         Destination:
           BucketAccountId: !Ref "AWS::AccountId"
           Format: CSV
-          BucketArn: !Sub "arn:aws:s3:::${AWS::AccountId}-${LogBucketName}"
-          Prefix: !Sub "s3-inventory/${DataBucketName}/"
+          BucketArn: !Sub "arn:aws:s3:::${LogBucketName}"
+          Prefix: !Sub "s3-inventory/${DataBucketName}"
         IncludedObjectVersions: All
         OptionalFields: 
           - Size
@@ -96,7 +111,7 @@ Resources:
         DestinationBucketName: !Sub "${LogBucketName}"
         LogFilePrefix: !Sub "s3-server-access-logs/${DataBucketName}/"
       MetricsConfigurations:
-        - Id: LogAllMetrics
+        - Id: EntireBucket
       #NotificationConfiguration:
       #  LambdaConfigurations:
       #    - Lambda Configuration
